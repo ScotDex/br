@@ -1,69 +1,43 @@
-var gOptIgnoreInsig         = true;
-var gOptIgnorePods          = false;
-var gOptIgnoreRookieShips   = false;
-var gOptIgnoreAllNonShips   = false;
-var gOptIgnorePosMods       = false;
-var gOptIgnoreDeployables   = false;
-var gOptIgnoreUnknowns      = false;
-var gOptIgnoreNPCs          = false;
+let gOptIgnoreInsig         = true;
+let gOptIgnorePods          = false;
+let gOptIgnoreRookieShips   = false;
+let gOptIgnoreAllNonShips   = false;
+let gOptIgnorePosMods       = false;
+let gOptIgnoreDeployables   = false;
+let gOptIgnoreUnknowns      = false;
+let gOptIgnoreNPCs          = false;
 
-var gOptHideAvatars         = false;
-var gOptHideLogos           = false;
+let gOptHideAvatars         = false;
+let gOptHideLogos           = false;
 
-var gOptEstimateFighterValues = true;
+let gOptEstimateFighterValues = true;
 
-function createCheckboxCell( name, text, checked )
-{
-  return TableData( '', '<input type="checkbox" name="' + name + '" onchange="updateOptions( \''+ name +'\')"' + ( checked ? ' checked' : '' ) + '>' + text + '</input>' );
+function createCheckboxCell( name, text, checked ) {
+  return TableData( '', `<input type="checkbox" name="${name}" onchange="updateOptions('${name}')"${checked ? ' checked' : ''}>${text}</input>` );
 }
 
-function generateOptionsTab( target )
-{
-  var html = [];
-  html.push( '<b><i>Under development</i></b><br><form><table><tr>' );
-  //html.push( createCheckboxCell( 'optAll', 'Ignore All Non-Ships', gOptIgnoreAllNonShips ));
-  //html.push( createCheckboxCell( 'optDeployables', 'Ignore Deployables', gOptIgnoreDeployables ));
-  //html.push( createCheckboxCell( 'optPosMods', 'Ignore POS mods', gOptIgnorePosMods ));
-  //html.push( '</tr><tr>' );
-  //html.push( createCheckboxCell( 'optUnknowns', 'Ignore Unknowns', gOptIgnoreUnknowns ));
-  //html.push( createCheckboxCell( 'optPods', 'Ignore Pods', gOptIgnorePods ));
-  //html.push( createCheckboxCell( 'optRookieShips', 'Ignore Rookie Ships', gOptIgnoreRookieShips ));
-  html.push( '</tr><tr>' );
-  //html.push( createCheckboxCell( 'optNPCs', 'Ignore NPCs', gOptIgnoreNPCs ));
-  html.push( createCheckboxCell( 'optInsig', 'Ignore insignificant corps/alliances', gOptIgnoreInsig ));
-  html.push( '</tr><tr>' );
-  html.push( createCheckboxCell( 'optFighterValues', 'Disable fighter value estimation', gOptEstimateFighterValues ));
-  html.push( '</tr></table></form>' );
-  $( target ).empty( );
-  $( target ).append( html.join( '' ));
+function generateOptionsTab( target ) {
+  const html = [
+    '<b><i>Under development</i></b><br><form><table><tr>',
+    '</tr><tr>',
+    createCheckboxCell( 'optInsig',        'Ignore insignificant corps/alliances', gOptIgnoreInsig ),
+    '</tr><tr>',
+    createCheckboxCell( 'optFighterValues','Disable fighter value estimation',     gOptEstimateFighterValues ),
+    '</tr></table></form>'
+  ];
+  $( target ).empty().append( html.join( '' ));
 }
 
-function updateOptions( option )
-{
-  if(option == 'optInsig'){
-    if(gOptIgnoreInsig){
-      gOptIgnoreInsig = false;
-    }
-    else
-    {
-      gOptIgnoreInsig = true;
-    }
-    updateShareLink( );
-    console.log('gOptIgnoreInsig:'+ gOptIgnoreInsig);
+function updateOptions( option ) {
+  if ( option === 'optInsig' ) {
+    gOptIgnoreInsig = !gOptIgnoreInsig;
+    updateShareLink();
+    console.log( `gOptIgnoreInsig:${gOptIgnoreInsig}` );
   }
-  if(option == 'optFighterValues') {
-    if(gOptEstimateFighterValues){
-      gOptEstimateFighterValues = false;
-    }
-    else
-    {
-      gOptEstimateFighterValues = true;
-    }
-    updateShareLink( );
-    console.log('gOptEstimateFighterValues:'+ gOptEstimateFighterValues);
+  if ( option === 'optFighterValues' ) {
+    gOptEstimateFighterValues = !gOptEstimateFighterValues;
+    updateShareLink();
+    console.log( `gOptEstimateFighterValues:${gOptEstimateFighterValues}` );
     startParsing();
   }
 }
-
-
-

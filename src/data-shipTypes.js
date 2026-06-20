@@ -1,6 +1,5 @@
-function initShipTypes( )
-{
-  var data = [ '[',
+function initShipTypes() {
+  const data = [ '[',
 
 ///////////////////////////////////////////////////////////// faction dreads  //////////////////////////////////////
 '{"I": 42124,  "N": "Vehement",                                     "G": "Dreadnought",                 "O": 299 },',
@@ -946,7 +945,7 @@ function initShipTypes( )
 
 ///////////////////////////////////////////////////////////// End of Known Data /////////////////////////////////
 '{"I": 0,     "N": "Unknown",                                       "G": "Unknown",                    "O": 999999 }',
-']' ].join( '' ); 
-  return jQuery.parseJSON( data );
+']' ].join( '' );
+  return JSON.parse( data );
 }
 
