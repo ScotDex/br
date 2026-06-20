@@ -1,582 +1,402 @@
-function loadEntryWindowData (entryWindow) {
+function loadEntryWindowData( entryWindow ) {
   const name = entryWindow.system.toUpperCase();
-  const id = gSolarSystems.find(solarsystem => solarsystem.N.toUpperCase() === name).I;
-  return loadKillmails({ type: { name: "solarSystemID", id }, start: createZkbDateStart( entryWindow.startTime ), end: createZkbDateEnd( entryWindow.endTime ), realStart: entryWindow.startTime, realEnd: entryWindow.endTime });
+  const id   = gSolarSystems.find( s => s.N.toUpperCase() === name ).I;
+  return loadKillmails({
+    type:      { name: 'solarSystemID', id },
+    start:     createZkbDateStart( entryWindow.startTime ),
+    end:       createZkbDateEnd( entryWindow.endTime ),
+    realStart: entryWindow.startTime,
+    realEnd:   entryWindow.endTime
+  });
 }
 
 // /////////////////////////////////////// ZKillboard parsing ///////////////////////////////////////////
 
-//////////////
-
-async function fetchPages (params, page = 1) {
-  $('#status').text( 'Reading data for ' + (params.type.name == "solarSystemID" ? solarSystemIDtoName(params.type.id) : params.type.name + ":" + params.type.id) + ' from ' + params.start + ' to ' + params.end + ', page # ' + (params.totalPages + page) + "-" + (params.totalPages + 10) );
-  return [].concat(...(await Promise.all(new Array(1).fill(0).map((x, i) => json(url(Object.assign(params, { page: i + 1 })))))));
-  /*
-  const data = await json(url(Object.assign(params, { page })));
-  $('#status').text( 'Reading data for ' + (params.type.name == "solarSystemID" ? solarSystemIDtoName(params.type.id) : params.type.name + ":" + params.type.id) + ' from ' + params.start + ' to ' + params.end + ', page #' + (params.totalPages + page) );
-  if (page !== 10 && data.length === 200)
-    return data.concat(await fetchPages(params, ++page));
-  else
-    return data;
-  */
-};
-
-const json = (...args) => fetch(...args).then(res => res.json());
-
-const chunkedJson = (url, ids, size) => Promise.all(ids.chunk(size).map(chunk => json(url, { method: "POST", body: "[" + chunk.join() + "]" }))).then(chunks => [].concat(...chunks));
-
-async function loadKillmails (params, end = params.end, totalPages = 0) {
-  var data = await fetchPages(Object.assign(params, { end, totalPages }));
-  if (data.length !== 0 && data.length === 200 * 10) {
-    const lastKillmail = data[data.length - 1];
-    var d = new Date(lastKillmail.killmail_time);
-    d.setHours(d.getHours() + 1);
-    const killmails = await loadKillmails(params, d.toISOString().replace(/:|-| |T/g,'').substring(0, 10) + "00", totalPages + 10);
-    const lastKillIndex = killmails.findIndex(({ killmail_id }) => killmail_id === lastKillmail.killmail_id);
-    return data.concat(killmails.slice(lastKillIndex + 1));
-  } else {
-    return data;
-  }
+async function fetchPages( params, page = 1 ) {
+  const label = params.type.name === 'solarSystemID'
+    ? solarSystemIDtoName( params.type.id )
+    : `${params.type.name}:${params.type.id}`;
+  $( '#status' ).text( `Reading data for ${label} from ${params.start} to ${params.end}, page # ${params.totalPages + page}-${params.totalPages + 10}` );
+  return [].concat( ...( await Promise.all( new Array( 1 ).fill( 0 ).map(( x, i ) => json( url( Object.assign( params, { page: i + 1 })))))));
 }
 
-Object.defineProperty(Array.prototype, 'chunk', {
-  value: function(chunkSize) {
-    let R = [];
-    for (let i = 0; i < this.length; i += chunkSize)
-      R.push(this.slice(i, i + chunkSize));
+const json = ( ...args ) => fetch( ...args ).then( res => res.json() );
+
+const chunkedJson = ( endpoint, ids, size ) =>
+  Promise.all( ids.chunk( size ).map( chunk => json( endpoint, { method: 'POST', body: '[' + chunk.join() + ']' })))
+    .then( chunks => [].concat( ...chunks ));
+
+async function loadKillmails( params, end = params.end, totalPages = 0 ) {
+  const data = await fetchPages( Object.assign( params, { end, totalPages }));
+  if ( data.length !== 0 && data.length === 200 * 10 ) {
+    const last = data[ data.length - 1 ];
+    const d    = new Date( last.killmail_time );
+    d.setHours( d.getHours() + 1 );
+    const more          = await loadKillmails( params, d.toISOString().replace( /:|-| |T/g, '' ).substring( 0, 10 ) + '00', totalPages + 10 );
+    const lastKillIndex = more.findIndex( ({ killmail_id }) => killmail_id === last.killmail_id );
+    return data.concat( more.slice( lastKillIndex + 1 ));
+  }
+  return data;
+}
+
+Object.defineProperty( Array.prototype, 'chunk', {
+  value( chunkSize ) {
+    const R = [];
+    for ( let i = 0; i < this.length; i += chunkSize ) R.push( this.slice( i, i + chunkSize ));
     return R;
   }
 });
 
-const url = ({ type: { name, id }, start, end, page }) => `https://zkillboard.com/api/kills/${name}/${id}/startTime/${start}/endTime/${end}/page/${page}/`;
+const url = ({ type: { name, id }, start, end, page }) =>
+  `https://zkillboard.com/api/kills/${name}/${id}/startTime/${start}/endTime/${end}/page/${page}/`;
 
-const toMap = (arr, key, value) => new Map(arr.map(el => [el[key], el[value]]));
-
-//////////////
+const toMap = ( arr, key, value ) => new Map( arr.map( el => [ el[ key ], el[ value ] ]));
 
 // /////////////////////////////////////// data parsing ///////////////////////////////////////////
-function cleaniskData(){
-  _.each( gData, function( killmail )
-  {
-    if(killmail.zkb != undefined){
-      if(!isNaN(parseInt(killmail.zkb.totalValue)) ){
-        killmail.zkb.totalValue = parseInt(killmail.zkb.totalValue);
-      }
-      else{
-        killmail.zkb.totalValue = 0;
-      }
+
+function cleaniskData() {
+  gData.forEach( killmail => {
+    if ( killmail.zkb !== undefined ) {
+      killmail.zkb.totalValue = !isNaN( parseInt( killmail.zkb.totalValue ))
+        ? parseInt( killmail.zkb.totalValue )
+        : 0;
+    } else {
+      killmail.zkb = { totalValue: 0 };
     }
-    else{
-      killmail.zkb = {};
-      killmail.zkb.totalValue = 0;
-    }
-  } );
+  });
 }
 
-function build_data( idToName )
-{
-  
+function build_data( idToName ) {
   cleaniskData();
-  
   handleUnknownShips();
+
   // Ship fielded/lost calcs
-  _.each( gPlayers, function( player )
-  {
-    var totalLost = 0;
-    var totalFielded = 0;
-    _.each( player.ships, function( ship )
-    {
-      var fielded = 1;
-      var lost = 0;
-      var prevWasVictim = false;
-      var lastVictimTime = 0;
-      // sort kills by chronological order
-      ship.kills.sort( function( lhs, rhs )
-      {
-        // sort predicate:  if the killtimes are equal then put the pod after the
-        //                  ship in the kill list
-        if ( lhs.time == rhs.time )
-        {
-          return isCapsule( lhs.ship_type_id ) - isCapsule( rhs.ship_type_id );
-        }
+  gPlayers.forEach( player => {
+    let totalLost = 0, totalFielded = 0;
+    player.ships.forEach( ship => {
+      let fielded = 1, lost = 0, prevWasVictim = false, lastVictimTime = 0;
+      ship.kills.sort(( lhs, rhs ) => {
+        if ( lhs.time === rhs.time ) return isCapsule( lhs.ship_type_id ) - isCapsule( rhs.ship_type_id );
         return lhs.time > rhs.time ? 1 : -1;
-      } );
-      // note: ship.kills MUST be sorted by time for the logic below to work
-      _.each( ship.kills, function( kill )
-      {
-        // pf:  i don't think this is a good idea, this will end up discarding relevant kills at some point
-        // ignore if same timestamp as last victim
-        if( prevWasVictim && lastVictimTime != kill.time && kill.ship_type_id != 0 )
-        {
-          ++fielded;
-        }
-        prevWasVictim = kill.victim;
-        if( kill.victim )
-        {
-          ++lost;
-          lastVictimTime = kill.time;
-        }
       });
-      ship.lost     = lost;
-      ship.fielded  = fielded;
+      ship.kills.forEach( kill => {
+        if ( prevWasVictim && lastVictimTime !== kill.time && kill.ship_type_id !== 0 ) ++fielded;
+        prevWasVictim = kill.victim;
+        if ( kill.victim ) { ++lost; lastVictimTime = kill.time; }
+      });
+      ship.lost    = lost;
+      ship.fielded = fielded;
       totalLost    += lost;
       totalFielded += fielded;
     });
     player.fielded = totalFielded;
-    player.lost = totalLost;
+    player.lost    = totalLost;
   });
-  
+
   parseGroupData( gData );
-  
   build_teams( gGroups, idToName );
-  
+
   // Isk calcs
-
-  
-  _.each( gData, function( killmail )
-  {
+  gData.forEach( killmail => {
     const kmGroupID = killmail.victim.alliance_id || killmail.victim.corporation_id;
-    if( killmail.zkb != undefined )
-    {
-      _.each( gGroups, function( group )
-      {
-        if( group.ID == kmGroupID )
-        {
-          if(!isNaN(parseInt(killmail.zkb.totalValue,10))){
-            group.iskLost += parseInt(killmail.zkb.totalValue,10);
-          }
+    if ( killmail.zkb !== undefined ) {
+      gGroups.forEach( group => {
+        if ( group.ID === kmGroupID && !isNaN( parseInt( killmail.zkb.totalValue, 10 ))) {
+          group.iskLost += parseInt( killmail.zkb.totalValue, 10 );
         }
-      } );
+      });
     }
-  } );
+  });
 }
 
-function createGroupedArray(arr, chunkSize) {
-    var groups = [], i;
-    for (i = 0; i < arr.length; i += chunkSize) {
-        groups.push(arr.slice(i, i + chunkSize));
-    }
-    return groups;
+function createGroupedArray( arr, chunkSize ) {
+  const groups = [];
+  for ( let i = 0; i < arr.length; i += chunkSize ) groups.push( arr.slice( i, i + chunkSize ));
+  return groups;
 }
 
-function parseKillRecord(kill, idToName) {
-  // Check each kill
-  assert( kill != undefined );
-  assert( kill.victim != undefined );
+function parseKillRecord( kill, idToName ) {
+  assert( kill !== undefined );
+  assert( kill.victim !== undefined );
 
   kill.value = function() {
-    if (!gOptEstimateFighterValues) { return kill.zkb.totalValue; };
-    let ship = _.find( gShipTypes, function( X ) { return X.I == kill.victim.ship_type_id; } );
-    if (ship == undefined) { return kill.zkb.totalValue; };
-    let group = ship.G;
-    let value = parseInt(this.zkb.totalValue, 10);
-    if (group == "Support Fighter")           { return value * 3; };
-    if (group == "Heavy Fighter")             { return value * 6; };
-    if (group == "Light Fighter")             { return value * 9; };
-    if (group == "Space Superiority Fighter") { return value * 12; };
+    if ( !gOptEstimateFighterValues ) return kill.zkb.totalValue;
+    const ship = gShipTypes.find( X => X.I == kill.victim.ship_type_id );
+    if ( ship === undefined ) return kill.zkb.totalValue;
+    const group = ship.G;
+    const value = parseInt( this.zkb.totalValue, 10 );
+    if ( group === 'Support Fighter'           ) return value * 3;
+    if ( group === 'Heavy Fighter'             ) return value * 6;
+    if ( group === 'Light Fighter'             ) return value * 9;
+    if ( group === 'Space Superiority Fighter' ) return value * 12;
     return value;
   };
 
-  if(kill.zkb) {
-    if(!isNaN(parseInt(kill.value(),10))) {
-      kill.zkb.totalValue = kill.value();
-      gSummaryIskLost += parseInt(kill.value(), 10);
-    }
+  if ( kill.zkb && !isNaN( parseInt( kill.value(), 10 ))) {
+    kill.zkb.totalValue  = kill.value();
+    gSummaryIskLost     += parseInt( kill.value(), 10 );
   }
 
-  // Check victim & each attacker
-  [kill.victim, ...kill.attackers].forEach(attacker => updateShip(attacker, kill, kill.victim, idToName));
+  [ kill.victim, ...kill.attackers ].forEach( attacker => updateShip( attacker, kill, kill.victim, idToName ));
 }
 
-function handleUnknownShips()
-{
-  _.each( gPlayers, function( player )
-  {
-    // TODO: It seems that this algorithm simply attaches all the kills for an unknown entry to
-    //       the next shipType, which is technically incorrect.
-    //       It does not affect anything now since we do not use this information at this time,
-    //       however should we start to do damage calculations for each ship in the fight this
-    //       will mistakenly assign damage to the wrong ship type.
-    //       The correct mechanism would be to process things in a chronological fashion and
-    //       ignore the unknown entries as they appear.
-    player.ships = _.sortBy( player.ships, function( ship ) { return ship.ship_type_id; } );
-    var unknownShip = _.find( player.ships, function( ship ) { return ship.ship_type_id == 0; } );
-    if( unknownShip != undefined && player.ships.length > 1 )
-    {
-      _.each( player.ships[ 0 ].kills, function( kill )
-      {
-        // push this data into the next ship in the ships array
-        player.ships[ 1 ].kills.push( kill );
-      });
-      // remove the unknown ship
+function handleUnknownShips() {
+  gPlayers.forEach( player => {
+    player.ships = [ ...player.ships ].sort(( a, b ) => a.ship_type_id - b.ship_type_id );
+    const unknownShip = player.ships.find( ship => ship.ship_type_id === 0 );
+    if ( unknownShip !== undefined && player.ships.length > 1 ) {
+      player.ships[ 0 ].kills.forEach( kill => player.ships[ 1 ].kills.push( kill ));
       player.ships.shift();
     }
-    // Fix indexes
-    _.each( player.ships, function( ship, shipIDX )
-    {
-      ship.index = shipIDX;
-    });
+    player.ships.forEach(( ship, shipIDX ) => { ship.index = shipIDX; });
   });
 }
 
-function parseGroupData( killdata )
-{
-  var NowTime = new Date();
-  // Check each player
-  _.each( gPlayers ,function( player )
-  {
-    updateGroup( checkGroupExists( player ), player );
-  } );
-  gGroups = _.sortBy( gGroups, function ( group ) { return 1 / group.players } );
-  var NowTimeEnd = new Date();
+function parseGroupData( killdata ) {
+  gPlayers.forEach( player => updateGroup( checkGroupExists( player ), player ));
+  gGroups = [ ...gGroups ].sort(( a, b ) => ( 1 / b.players ) - ( 1 / a.players ));
 }
 
-function updateShip( player, kill, victim, idToName )
-{
-  var playerIndex = checkPlayerExists( player, idToName );
-  var shipIndex = checkShipExists( player, playerIndex );
-  var newKill = new Object;
-  newKill.killmail_id = kill.killmail_id;
-  newKill.time = kill.killmail_time;
-  assert( victim != undefined );
-  newKill.player = gPlayers[ checkPlayerExists( victim, idToName ) ];
-  newKill.victim = ( player.character_id == victim.character_id );
-  newKill.iskLost = 0;
-  newKill.ship_type_id = player.ship_type_id;
-  if ( newKill.victim )
-  {
-    assert( gTotalDamage != undefined );
-    assert( gTotalDamage != NaN );
-    assert( player.damage_taken != undefined );
-    assert( player.damage_taken != NaN );
-    gTotalDamage += Number(player.damage_taken);
-    newKill.damage = Number(player.damage_taken);
+function updateShip( player, kill, victim, idToName ) {
+  const playerIndex = checkPlayerExists( player, idToName );
+  const shipIndex   = checkShipExists( player, playerIndex );
+  const newKill = {
+    killmail_id:  kill.killmail_id,
+    time:         kill.killmail_time,
+    player:       gPlayers[ checkPlayerExists( victim, idToName )],
+    victim:       player.character_id == victim.character_id,
+    iskLost:      0,
+    ship_type_id: player.ship_type_id
+  };
+  assert( victim !== undefined );
+  if ( newKill.victim ) {
+    assert( gTotalDamage !== undefined );
+    assert( player.damage_taken !== undefined );
+    gTotalDamage      += Number( player.damage_taken );
+    newKill.damage     = Number( player.damage_taken );
     newKill.final_blow = 0;
     newKill.weaponTypeID = 0;
-    if ( kill.zkb != undefined && kill.zkb.totalValue != undefined )
-    {
-      newKill.iskLost = parseInt(kill.zkb.totalValue,10);
+    if ( kill.zkb !== undefined && kill.zkb.totalValue !== undefined ) {
+      newKill.iskLost = parseInt( kill.zkb.totalValue, 10 );
     }
-  }
-  else
-  {
-    newKill.damage = Number(player.damage_done);
-    newKill.final_blow = player.final_blow;
+  } else {
+    newKill.damage      = Number( player.damage_done );
+    newKill.final_blow  = player.final_blow;
     newKill.weaponTypeID = player.weaponID;
   }
-  assert( gPlayers[ playerIndex ].ships[ shipIndex ] != undefined );
+  assert( gPlayers[ playerIndex ].ships[ shipIndex ] !== undefined );
   gPlayers[ playerIndex ].ships[ shipIndex ].kills.push( newKill );
 }
 
 // Player Functions
-  
-function checkPlayerExists( player, idToName )
-{
-  // this method is more complex than it needs to be due to bugs in the eve killmails themselves.
-  // since these mails sometimes just decide to omit the corporation and corporation_id from the data,
-  // we use some logic to determine if player record being checked is actually already in the global
-  // list or not
-  var foundPlayer = gPlayers.find(( testPlayer, index ) => {
-    // if the player names are equal, either the corp ID or the alliance ID needs to match
-    // as well, since for structures the player name is an empty string
-    if ( player.character_id == testPlayer.character_id )
-    {
-      // player names are equal, compare the alliance IDs
-      var equal = ( player.alliance_id == testPlayer.alliance_id );
-      // since the corp ID can get left out, check to see if the player we are checking
-      // has a corpID
-      if (player.corporation_id)
-      {
-        if (testPlayer.corporation_id)
-        {
-          // both the player being checked and the player in the list have a corpID,
-          // return the results of the corpID comparison
+
+function checkPlayerExists( player, idToName ) {
+  const foundPlayer = gPlayers.find(( testPlayer ) => {
+    if ( player.character_id == testPlayer.character_id ) {
+      const equal = player.alliance_id == testPlayer.alliance_id;
+      if ( player.corporation_id ) {
+        if ( testPlayer.corporation_id ) {
           return player.corporation_id == testPlayer.corporation_id;
         }
-        // since the corpID of the entry in the list is not set we check to see if the alliance IDs
-        // are equal and if so, we overwrite the empty corp information in the list's player entry
-        // with those of the player being checked and fall through to returning that they are equal
-        if ( equal )
-        {
+        if ( equal ) {
           testPlayer.corporation_id   = player.corporation_id;
-          testPlayer.corporation_name = idToName.get(player.corporation_id);
+          testPlayer.corporation_name = idToName.get( player.corporation_id );
         }
       }
-      // player being checked does not have a corp ID, return the result of the alliance
-      // comparision
       return equal;
     }
-    // player names are not equal, definitely not the same player entity
     return false;
-  } );
-  return foundPlayer != undefined ? foundPlayer.index : addplayer( player, idToName );
+  });
+  return foundPlayer !== undefined ? foundPlayer.index : addplayer( player, idToName );
 }
 
-function addplayer ({ character_id, corporation_id, alliance_id, faction_id }, idToName) {
+function addplayer({ character_id, corporation_id, alliance_id, faction_id }, idToName ) {
   return gPlayers.push({
-    id: character_id,
-    character_id, // ?
-    name: idToName.get(character_id),
+    id:               character_id,
+    character_id,
+    name:             idToName.get( character_id ),
     corporation_id,
-    corporation_name: idToName.get(corporation_id),
+    corporation_name: idToName.get( corporation_id ),
     alliance_id,
-    alliance_name: idToName.get(alliance_id),
+    alliance_name:    idToName.get( alliance_id ),
     faction_id,
-    faction_name: faction_id,
-    ships: [],
-    damage_dealt: 0,
-    damage_taken: 0,
-    index: gPlayers.length
+    faction_name:     faction_id,
+    ships:            [],
+    damage_dealt:     0,
+    damage_taken:     0,
+    index:            gPlayers.length
   }) - 1;
 }
 
-function checkShipExists(player, playerIndex) {
-  const foundShip = gPlayers[playerIndex].ships.find(testShip => player.ship_type_id == testShip.ship_type_id);
-  return foundShip != undefined ? foundShip.index : addship(player, playerIndex);
+function checkShipExists( player, playerIndex ) {
+  const foundShip = gPlayers[ playerIndex ].ships.find( s => player.ship_type_id == s.ship_type_id );
+  return foundShip !== undefined ? foundShip.index : addship( player, playerIndex );
 }
 
-function addship( player, playerIndex )
-{
-  if( isCapsule( player.ship_type_id ))
-  {
-    ++gSummaryPods;
-  }
-  else
-  {
-    ++gSummaryShips;
-  }
-  var newship = new Object;
-  newship.kills = [];
-  newship.iskLost = 0;
-  newship.damage_taken = 0;
-  newship.damage_dealt = 0;
-  newship.ship_type_id = player.ship_type_id;
-  newship.index = gPlayers[ playerIndex ].ships.length
+function addship( player, playerIndex ) {
+  if ( isCapsule( player.ship_type_id )) ++gSummaryPods;
+  else                                   ++gSummaryShips;
+  const newship = {
+    kills:        [],
+    iskLost:      0,
+    damage_taken: 0,
+    damage_dealt: 0,
+    ship_type_id: player.ship_type_id,
+    index:        gPlayers[ playerIndex ].ships.length
+  };
   gPlayers[ playerIndex ].ships.push( newship );
   return newship.index;
 }
 
 // Group Functions
 
-function checkGroupExists( player )
-{
-  var groupID = player.corporation_id;
-  if(!!player.alliance_id)
-  {
-    var groupID = player.alliance_id;
-  }
-  var foundGroup = _.find( gGroups, function( testGroup ) { return groupID == testGroup.ID } );
-  if( foundGroup != undefined )
-  {
+function checkGroupExists( player ) {
+  const groupID   = player.alliance_id || player.corporation_id;
+  const foundGroup = gGroups.find( g => groupID == g.ID );
+  if ( foundGroup !== undefined ) {
     player.group = foundGroup;
     return foundGroup.index;
   }
   return addGroup( player );
 }
 
-function addGroup( player )
-{
-  var newGroup = new Object;
-  if(!!player.alliance_id)
-  {
-    newGroup.ID = player.alliance_id;
-    newGroup.name = player.alliance_name;
-  }
-  else
-  {
-    newGroup.ID = player.corporation_id;
-    newGroup.name = player.corporation_name;
-  }
-  newGroup.factionID   = player.factionID;
-  newGroup.faction_name = player.faction_name;
-  newGroup.damage_dealt = 0;
-  newGroup.damage_taken = 0;
-  newGroup.killed = 0;
-  newGroup.players = 0;
-  newGroup.iskLost = 0;
-  newGroup.ships = [];
-  newGroup.index = gGroups.length;
-  newGroup.coalitionShortName = '';
+function addGroup( player ) {
+  const newGroup = {
+    ID:                player.alliance_id  ? player.alliance_id     : player.corporation_id,
+    name:              player.alliance_id  ? player.alliance_name   : player.corporation_name,
+    factionID:         player.factionID,
+    faction_name:      player.faction_name,
+    damage_dealt:      0,
+    damage_taken:      0,
+    killed:            0,
+    players:           0,
+    iskLost:           0,
+    ships:             [],
+    index:             gGroups.length,
+    coalitionShortName:''
+  };
   player.group = newGroup;
   gGroups.push( newGroup );
   return newGroup.index;
 }
 
-function updateGroup( groupIndex, player )
-{
-  var group = gGroups[ groupIndex ];
+function updateGroup( groupIndex, player ) {
+  const group = gGroups[ groupIndex ];
   ++group.players;
-  // Check each ship for this player
-  _.each( player.ships, function( playerShip )
-  {
-    var groupShip = checkGroupShipExists( group, playerShip );
-    // Check each kill for this ship
-    _.each( playerShip.kills ,function( kill )
-    {
-      if( kill.victim )
-      {
-        assert( group.damage_taken != undefined );
-        assert( group.damage_taken != NaN );
-        assert( groupShip.damage_taken != undefined );
-        assert( groupShip.damage_taken != NaN );
-        group.damage_taken      += kill.damage;
-        groupShip.damage_taken  += kill.damage;
+  player.ships.forEach( playerShip => {
+    const groupShip = checkGroupShipExists( group, playerShip );
+    playerShip.kills.forEach( kill => {
+      if ( kill.victim ) {
+        assert( group.damage_taken  !== undefined );
+        assert( groupShip.damage_taken !== undefined );
+        group.damage_taken     += kill.damage;
+        groupShip.damage_taken += kill.damage;
         groupShip.iskLost      += kill.iskLost;
+      } else {
+        assert( group.damage_dealt    !== undefined );
+        assert( groupShip.damage_dealt !== undefined );
+        group.damage_dealt     += kill.damage;
+        groupShip.damage_dealt += kill.damage;
       }
-      else
-      {
-        assert( group.damage_dealt != undefined );
-        assert( group.damage_dealt != NaN );
-        assert( groupShip.damage_dealt != undefined );
-        assert( groupShip.damage_dealt != NaN );
-
-        group.damage_dealt      += kill.damage;
-        groupShip.damage_dealt  += kill.damage;
-      }
-    } );
+    });
     groupShip.fielded += playerShip.fielded;
     groupShip.lost    += playerShip.lost;
     group.killed      += playerShip.lost;
-  } );
+  });
 }
 
-function checkGroupShipExists (group, ship) {
-  const foundShip = group.ships.find(testShip => ship.ship_type_id == testShip.shipID);
-  return foundShip != undefined ? foundShip : addGroupShip(ship, group);
+function checkGroupShipExists( group, ship ) {
+  const found = group.ships.find( s => ship.ship_type_id == s.shipID );
+  return found !== undefined ? found : addGroupShip( ship, group );
 }
 
-function addGroupShip ({ ship_type_id }, group) {
-  return group.ships[group.ships.push({
-    shipID: ship_type_id,
-    lost: 0,
-    fielded: 0,
-    iskLost: 0,
+function addGroupShip({ ship_type_id }, group ) {
+  return group.ships[ group.ships.push({
+    shipID:       ship_type_id,
+    lost:         0,
+    fielded:      0,
+    iskLost:      0,
     damage_taken: 0,
     damage_dealt: 0,
-    index: group.ships.length
-  }) - 1];
+    index:        group.ships.length
+  }) - 1 ];
 }
 
-function build_teams( groups, idToName )
-{
-  gTeams = [ [],[] ];
-  _.each( groups, function( group, index )
-  {
-    var dmgTakenFactor = Math.round( group.damage_taken / gTotalDamage * 1000 ) / 10;
-    var dmgDealtFactor = Math.round( group.damage_dealt / gTotalDamage * 1000 ) / 10;
-    var playerFactor   = Math.round( group.players / Math.min( gPlayers.length, 1000 ) * 1000 ) / 10;
-//    console.log( group.name + ' damage taken: ' + group.damage_taken + ' (' + dmgTakenFactor + '%)' );
-//    console.log( group.name + ' damage done : ' + group.damage_dealt + ' (' + dmgDealtFactor + '%)' );
-//    console.log( group.name + ' involved    : ' + group.players + ' (' + playerFactor + '%)' );
-    
-    // Decide if group is insignificant
-    // test
-    // http://evf-eve.com/services/brcat/?s=3726&b=6044760&e=1740&t=dQQfLdGGcaQaGaaaaaaai
-    if ( dmgTakenFactor < 1 && dmgDealtFactor < 1 && playerFactor < 1 && gOptIgnoreInsig)
-    {
-//      group.name += ' (*)';
+function build_teams( groups, idToName ) {
+  gTeams = [ [], [] ];
+  groups.forEach(( group, index ) => {
+    const dmgTakenFactor = Math.round( group.damage_taken / gTotalDamage * 1000 ) / 10;
+    const dmgDealtFactor = Math.round( group.damage_dealt / gTotalDamage * 1000 ) / 10;
+    const playerFactor   = Math.round( group.players / Math.min( gPlayers.length, 1000 ) * 1000 ) / 10;
+
+    if ( dmgTakenFactor < 1 && dmgDealtFactor < 1 && playerFactor < 1 && gOptIgnoreInsig ) {
       group.team = -1;
-    }
-    else
-    {
-      var team;
-      if ( gLoadTeams.length > 0 )
-      {
-        team = gLoadTeams[ index ] == undefined ? 0 : gLoadTeams[ index ];
+    } else {
+      let team;
+      if ( gLoadTeams.length > 0 ) {
+        team = gLoadTeams[ index ] === undefined ? 0 : gLoadTeams[ index ];
+      } else if ( gCurrentTeams.length > 0 ) {
+        team = 1;
+        gCurrentTeams.forEach(( currentTeam, currentTeamIdx ) => {
+          team = currentTeam.find( X => X === group.ID + '' ) !== undefined ? currentTeamIdx : team;
+        });
+      } else {
+        team = gBlueTeams.find( X => X == group.ID ) !== undefined ? 0 : 1;
       }
-      else
-      {
-        // if we are loading extra data, use the existing team assignment we saved
-        if(gCurrentTeams.length > 0)
-        {
-          // Default Team is red
-          team = 1;
-          _.each(gCurrentTeams, function(currentTeam, currentTeamIdx){
-            team = ( _.find( currentTeam, function( X ) { return X == group.ID+ ''; } ) == undefined ) ? team : currentTeamIdx;
-          });
-        }
-        else
-        {
-          team = ( _.find( gBlueTeams, function( X ) { return X == group.ID; } ) == undefined ) ? 1 : 0;
-        }
-      }
-      while( team >= gTeams.length )
-      {
-        gTeams.push( [] );
-      }
+      while ( team >= gTeams.length ) gTeams.push( [] );
       gTeams[ team ].push( index );
       group.team = team;
     }
-  } );
-  addTeamTabs(idToName);
+  });
+  addTeamTabs( idToName );
 }
 
-
-function assign_group_to_team( targetTeam, groupIndex )
-{
-  var currentTeam = getTeam( gGroups[ groupIndex ].ID );
-  if ( currentTeam == 0 )
-  {
-    // note:  the adding of the empty string forces the ID into a string, which is
-    //        necessary since all the cookies are strings
-    gBlueTeams = _.without( gBlueTeams, gGroups[ groupIndex ].ID + '' );
-    writeCookies( );
+function assign_group_to_team( targetTeam, groupIndex ) {
+  const currentTeam = getTeam( gGroups[ groupIndex ].ID );
+  if ( currentTeam === 0 ) {
+    gBlueTeams = gBlueTeams.filter( x => x !== gGroups[ groupIndex ].ID + '' );
+    writeCookies();
   }
   gGroups[ groupIndex ].team = targetTeam;
-  var oldTeam = _.without( gTeams[ currentTeam ], groupIndex );
-  gTeams[ currentTeam ] = oldTeam;
-  if( gTeams.length > targetTeam )
-  {
+  gTeams[ currentTeam ] = gTeams[ currentTeam ].filter( x => x !== groupIndex );
+  if ( gTeams.length > targetTeam ) {
+    gTeams[ targetTeam ].push( groupIndex );
+  } else {
+    gTeams.push( [] );
     gTeams[ targetTeam ].push( groupIndex );
   }
-  else
-  {
-    var newTeam = [];
-    gTeams.push( newTeam );
-    gTeams[ targetTeam ].push( groupIndex );
-  }
-  if ( targetTeam == 0 )
-  {
+  if ( targetTeam === 0 ) {
     gBlueTeams.push( gGroups[ groupIndex ].ID + '' );
-    writeCookies( );
+    writeCookies();
   }
 }
 
-function delete_team( teamIdx )
-{
-  profile( 'removeTeamTabs',       function( ) { removeTeamTabs( ); } );
+function delete_team( teamIdx ) {
+  profile( 'removeTeamTabs', () => removeTeamTabs() );
   gTeams.splice( teamIdx, 1 );
-  profile( 'addTeamTabs',          function( ) { addTeamTabs( ); } );
-  profile( 'refresh',              function( ) { refresh( ); } );
+  profile( 'addTeamTabs',    () => addTeamTabs() );
+  profile( 'refresh',        () => refresh() );
 }
 
-function MakeSpan( val )
-{
-  return '<span class="ui-state-default ui-state-error ui-corner-all ux-summaryBox">' + val + '</span>';
+function MakeSpan( val ) {
+  return `<span class="ui-state-default ui-state-error ui-corner-all ux-summaryBox">${val}</span>`;
 }
 
-function generateSummary( startTime, endTime, lastKillTime, workingFlag, idToName )
-{
-  var summaryIskLost = roundIsk( gSummaryIskLost );
+function generateSummary( startTime, endTime, lastKillTime, workingFlag, idToName ) {
+  const summaryIskLost = roundIsk( gSummaryIskLost );
+  let outputText = 'Total lost';
 
-  var outputText = 'Total lost';
-  if ( workingFlag )
+  if ( workingFlag ) {
     outputText += ' so far';
-  else
-  {
-    addTab( 10,  'Involved',       'involvedTable',     function( ) { generateInvolved(idToName); } );
-    addTab( 20,  'Class Summary',  'classSummaryTable', function( ) { draw_class_summary_table( '#classSummaryTable' ); } );
-    addTab( 30,  'Ship Summary',   'summaryTable',      function( ) { draw_summary_table( '#summaryTable',gTeams ); } );
-    addTab( 40,  'Timeline',       'timeLine',          function( ) { generateBattleTimeline( '#timeLine', idToName ); } );
-    addTab( 50,  'Replay',       'animTab',          function( ) { generateAnimation( '#animTab' ); } );
-    addTab( 400, 'Chart',          'chartTab',          function( ) { draw_charts(); } );
-    addTab( 500, 'Kill List',      'ktl',               function( ) { draw_kill_table(idToName); } );
+  } else {
+    addTab( 10,  'Involved',      'involvedTable',     () => generateInvolved( idToName ) );
+    addTab( 20,  'Class Summary', 'classSummaryTable', () => draw_class_summary_table( '#classSummaryTable' ) );
+    addTab( 30,  'Ship Summary',  'summaryTable',      () => draw_summary_table( '#summaryTable', gTeams ) );
+    addTab( 40,  'Timeline',      'timeLine',          () => generateBattleTimeline( '#timeLine', idToName ) );
+    addTab( 50,  'Replay',        'animTab',           () => generateAnimation( '#animTab' ) );
+    addTab( 400, 'Chart',         'chartTab',          () => draw_charts() );
+    addTab( 500, 'Kill List',     'ktl',               () => draw_kill_table( idToName ) );
   }
-  outputText    += ': '          + MakeSpan( summaryIskLost );
-  outputText    += ' Players: '  + MakeSpan( gPlayers.length );
-  outputText    += ' Ships: '    + MakeSpan( gSummaryShips );
-  outputText    += ' Pods: '     + MakeSpan( gSummaryPods );
-  $('#summaryText').empty( );
-  $('#summaryText').append( outputText );
+  outputText += `: ${MakeSpan( summaryIskLost )} Players: ${MakeSpan( gPlayers.length )} Ships: ${MakeSpan( gSummaryShips )} Pods: ${MakeSpan( gSummaryPods )}`;
+  $( '#summaryText' ).empty().append( outputText );
 }
-
